@@ -12,8 +12,6 @@ A formulação inicial é de **programação linear inteira mista (MILP)** para 
 
 O **quarto trabalho** aborda um problema pré-estabelecido pela disciplina, independente deste tema.
 
-Referências de partida e de evolução estão em [`links_microrrede_otimizacao.txt`](links_microrrede_otimizacao.txt).
-
 ## Trabalhos
 
 | # | Abordagem (prevista) | Problema | Entregas |
@@ -27,4 +25,7 @@ A pasta de cada trabalho será criada à medida que o material for desenvolvido.
 
 ## Referências
 
-Para o Trabalho 1 (MILP / operação ótima), as fontes principais sugeridas são Tenfen e Finardi, Luna et al. e os artigos de EMS baseado em MILP. As demais referências do arquivo de links servem para justificar a evolução do modelo nos Trabalhos 2 e 3.
+A lista completa, com links e indicação de uso, está em [`links_microrrede_otimizacao.md`](links_microrrede_otimizacao.md).
+
+- **[Fontes para usar agora](links_microrrede_otimizacao.md#1-fontes-para-usar-agora)** — Trabalho 1 (MILP / operação ótima). Prioridade: Tenfen e Finardi, Luna et al. e os artigos de EMS baseado em MILP.
+- **[Fontes para usar futuramente](links_microrrede_otimizacao.md#2-fontes-para-usar-futuramente)** — Trabalhos 2 e 3. MINLP, otimização estocástica, envelhecimento de baterias, dimensionamento e multiobjetivo, para justificar a evolução do modelo.
