@@ -85,79 +85,53 @@ Nesta instância, os limites inferiores de carga, descarga, compra e venda são 
 
 ### Modelo
 
-Nas equações abaixo, $n = n_{\mathrm{horas}} = 24$. As restrições (2b) e (3)–(8) valem no domínio indicado.
+Nas equações abaixo, n = n_horas = 24. A restrição (2b) vale para t = 1, 2, …, n−1. As restrições (3)–(8) valem para todo t ∈ T.
 
 **(1)**
 
-$$
-\min \sum_{t=1}^{n} c_t E_t^{\mathrm{compra}}
-$$
+$$\min \sum_{t=1}^{n} c_t E_t^{compra}$$
 
 sujeito a:
 
 **(2a)**
 
-$$
-\mathrm{SOC}_{1} = \mathrm{SOC}^{\mathrm{ini}}
-$$
+$$SOC_1 = SOC^{ini}$$
 
-**(2b)**  $t = 1, 2, \dots, n-1$
+**(2b)** para t = 1, 2, …, n−1
 
-$$
-\mathrm{SOC}_{t+1}
-= \mathrm{SOC}_{t}
-+ \mu_{t}^{\mathrm{carga}} E_{t}^{\mathrm{carga,bat}}
-- \mu_{t}^{\mathrm{descarga}} E_{t}^{\mathrm{descarga,bat}}
-$$
+$$SOC_{t+1} = SOC_t + \mu_t^{carga} E_t^{carga,bat} - \mu_t^{descarga} E_t^{descarga,bat}$$
 
 **(2c)**
 
-$$
-\mathrm{SOC}_{n} = \mathrm{SOC}^{\mathrm{ini}}
-$$
+$$SOC_n = SOC^{ini}$$
 
-**(3)**  $t \in T$
+**(3)** para todo t ∈ T
 
-$$
-E_{t}^{\mathrm{compra}} + P_{t}^{\mathrm{eol}} + P_{t}^{\mathrm{sol}} + E_{t}^{\mathrm{descarga,bat}}
-= E_{t}^{\mathrm{venda}} + E_{t}^{\mathrm{carga,bat}} + P_{t}^{\mathrm{dem}}
-$$
+$$E_t^{compra} + P_t^{eol} + P_t^{sol} + E_t^{descarga,bat} = E_t^{venda} + E_t^{carga,bat} + P_t^{dem}$$
 
-**(4)**  $t \in T$
+**(4)** para todo t ∈ T
 
-$$
-\mathrm{SOC}_{t}^{\min} \le \mathrm{SOC}_{t} \le \mathrm{SOC}_{t}^{\max}
-$$
+$$SOC_t^{min} \le SOC_t \le SOC_t^{max}$$
 
-**(5)**  $t \in T$
+**(5)** para todo t ∈ T
 
-$$
-E_{t}^{\mathrm{carga,bat,min}} \le E_{t}^{\mathrm{carga,bat}} \le E_{t}^{\mathrm{carga,bat,max}}
-$$
+$$E_t^{carga,bat,min} \le E_t^{carga,bat} \le E_t^{carga,bat,max}$$
 
-**(6)**  $t \in T$
+**(6)** para todo t ∈ T
 
-$$
-E_{t}^{\mathrm{descarga,bat,min}} \le E_{t}^{\mathrm{descarga,bat}} \le E_{t}^{\mathrm{descarga,bat,max}}
-$$
+$$E_t^{descarga,bat,min} \le E_t^{descarga,bat} \le E_t^{descarga,bat,max}$$
 
-**(7)**  $t \in T$
+**(7)** para todo t ∈ T
 
-$$
-E_{t}^{\mathrm{compra,min}} \le E_{t}^{\mathrm{compra}} \le E_{t}^{\mathrm{compra,max}}
-$$
+$$E_t^{compra,min} \le E_t^{compra} \le E_t^{compra,max}$$
 
-**(8)**  $t \in T$
+**(8)** para todo t ∈ T
 
-$$
-E_{t}^{\mathrm{venda,min}} \le E_{t}^{\mathrm{venda}} \le E_{t}^{\mathrm{venda,max}}
-$$
+$$E_t^{venda,min} \le E_t^{venda} \le E_t^{venda,max}$$
 
-LaTeX para colar no Word (Alt+= → colar, sem cifrões):
+Para colar a (2b) no Word: `Alt`+`=` e cole, sem cifrões:
 
-- (2b) `SOC_{t+1} = SOC_t + \mu_t^{carga} E_t^{carga,bat} - \mu_t^{descarga} E_t^{descarga,bat}`
-- (2c) `SOC_n = SOC^{ini}`
-- (4) `SOC_t^{min} \le SOC_t \le SOC_t^{max}`
+`SOC_{t+1} = SOC_t + \mu_t^{carga} E_t^{carga,bat} - \mu_t^{descarga} E_t^{descarga,bat}`
 
 - **(1)** minimiza o custo de compra. Diferentemente de um modelo que também precifique o diesel ou a venda, só $E_t^{\mathrm{compra}}$ entra na função objetivo, ponderada por $c_t$.
 - **(2a)–(2c)** descrevem a dinâmica do SOC, com condição inicial e fechamento cíclico do dia ($\mathrm{SOC}_{\mathrm{final}} = \mathrm{SOC}_{\mathrm{inicial}}$).
