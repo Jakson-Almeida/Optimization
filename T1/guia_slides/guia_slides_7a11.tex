@@ -1,0 +1,354 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{ufjf}{HTML}{006778}
+\definecolor{fala}{HTML}{EAF4F6}
+\definecolor{alerta}{HTML}{FFF3E0}
+\definecolor{alertaborda}{HTML}{E65100}
+
+\titleformat{\section}{\Large\bfseries\color{ufjf}}{}{0pt}{}
+\titleformat{\subsection}{\large\bfseries\color{ufjf}}{}{0pt}{}
+\titlespacing*{\section}{0pt}{0.6em}{0.6em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Guia de fala -- Slides 7 a 11}
+\fancyhead[R]{\small Otimização da operação de uma microrrede via PL}
+\fancyfoot[C]{\thepage}
+
+\setlist[itemize]{itemsep=2pt, topsep=3pt}
+
+\newtcolorbox{fala}{colback=fala, colframe=ufjf, boxrule=0.6pt, arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  title={\bfseries O que falar}, fonttitle=\small, before upper={\setlength{\parskip}{5pt}}}
+\newtcolorbox{alerta}[1][Atenção]{colback=alerta, colframe=alertaborda, boxrule=0.6pt, arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  title={\bfseries #1}, fonttitle=\small}
+
+\newcommand{\slideimg}[1]{%
+  \begin{center}
+    \fcolorbox{gray!50}{white}{\includegraphics[width=0.5\textwidth]{img/slide-#1.png}}
+  \end{center}}
+\newcommand{\transicao}[1]{\noindent\textbf{Transição:} \emph{#1}}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries\color{ufjf} Guia de fala -- Slides 7 a 11}\\[4pt]
+  {\large Otimização da operação de uma microrrede via Programação Linear}\\[2pt]
+  {\small Métodos de Otimização -- PPEE/UFJF -- Setembro de 2026}
+\end{center}
+
+\vspace{0.3em}
+\noindent Este guia cobre o trecho que vai dos \textbf{dados de entrada} (slide 7) até o
+\textbf{método de solução e os parâmetros da instância} (slide 11). Para cada slide há:
+um roteiro de fala (para ler em voz alta ou adaptar), os pontos que não podem faltar,
+a frase de transição para o slide seguinte e perguntas prováveis da banca com resposta curta.
+O trecho inteiro deve durar cerca de \textbf{5 a 6 minutos}.
+
+\vspace{0.3em}
+\noindent\textbf{Fio condutor do trecho:} \emph{o que entra no modelo} (slide 7) $\rightarrow$
+\emph{o que o modelo decide e com quais regras} (slides 8 e 9) $\rightarrow$
+\emph{por que isso é um PL e o que simplificamos} (slide 10) $\rightarrow$
+\emph{como resolvemos e com quais números} (slide 11).
+
+%======================================================================
+\section{Slide 7 -- Dados de entrada do modelo}
+{\small\color{gray}Tempo sugerido: $\approx$ 1 min}
+\slideimg{07}
+
+\begin{fala}
+``Depois de apresentar a topologia da microrrede, vamos ver \textbf{o que o modelo recebe como dado},
+ou seja, tudo aquilo que é conhecido antes da otimização e que o modelo não decide.
+
+Primeiro, os perfis de \textbf{geração fotovoltaica} e \textbf{eólica}. Eles são
+\textbf{determinísticos}: consideramos que sabemos, hora a hora, quanto cada fonte consegue gerar ao longo do dia.
+Isso é uma simplificação, porque na prática sol e vento são incertos, mas permite manter o problema linear e determinístico.
+
+Da \textbf{bateria}, o modelo precisa da capacidade, das eficiências de carga e descarga, do estado de carga
+inicial e dos limites de estado de carga. Esses limites existem para preservar a vida útil da bateria,
+evitando descargas profundas ou sobrecarga.
+
+Da \textbf{concessionária}, entram o limite de compra de energia e a \textbf{tarifa horária}, que também é
+conhecida de antemão. A tarifa é o que dá o sinal econômico para o modelo: é ela que indica quando vale a pena comprar.
+
+Por fim, a \textbf{demanda}, composta por uma parcela fixa somada a uma parcela variável ao longo do dia.
+Os valores numéricos desses dados aparecem no slide 11.''
+\end{fala}
+
+\noindent\textbf{Pontos-chave}
+\begin{itemize}
+  \item Deixar claro que esses são \textbf{parâmetros}, não variáveis: o modelo não escolhe quanto sol ou vento há.
+  \item Tudo é \textbf{determinístico} (geração, tarifa e demanda conhecidas para as 24 h).
+  \item A microrrede e os dados vêm do trabalho de Luna \emph{et al.} [2], um protótipo em escala de laboratório
+        de uma plataforma real em Xangai.
+  \item A demanda usada é o \textbf{caso 1} de [2] (demanda alta) acrescido de 345\,W fixos.
+\end{itemize}
+
+\transicao{``Com esses dados, podemos montar a formulação matemática do problema.''}
+
+\medskip
+\noindent\textbf{Possíveis perguntas}
+\begin{itemize}
+  \item \emph{Por que não considerar a incerteza da geração?} Porque isso exigiria programação estocástica
+        ou otimização robusta, que foge do escopo de um PL determinístico. É uma extensão natural do trabalho.
+  \item \emph{De onde vêm os perfis?} Da microrrede de Luna \emph{et al.} [2], valores horários (Tabela 3 do resumo).
+\end{itemize}
+
+%======================================================================
+\section{Slide 8 -- Função objetivo e dinâmica da bateria}
+{\small\color{gray}Tempo sugerido: $\approx$ 1,5 min}
+\slideimg{08}
+
+\begin{fala}
+``Agora a formulação. A \textbf{função objetivo}, equação (1), é \textbf{minimizar o custo de compra de energia}
+da concessionária ao longo do dia. Para cada hora $t$, multiplicamos a tarifa $c_t$ pela potência comprada
+$P^{\text{compra}}_t$ e pela duração do intervalo $\Delta t$, o que converte potência em energia. Como $\Delta t$ é
+de uma hora, a potência em watts coincide numericamente com a energia em watt-hora.
+
+Repare que só a compra aparece no custo: solar, eólica e bateria são consideradas sem custo de operação.
+Então, na prática, o modelo tenta \textbf{usar ao máximo os recursos próprios} e, quando precisar comprar,
+\textbf{comprar nas horas mais baratas}.
+
+As equações (2) e (3) tratam das condições de contorno da bateria. A (2) fixa o estado de carga no início do dia
+em um valor conhecido, o $\mathrm{SOC}^{\text{ini}}$. A (3) obriga a bateria a \textbf{terminar o dia com o
+mesmo estado de carga com que começou}. Sem essa restrição, o modelo simplesmente esvaziaria a bateria até o
+limite mínimo para evitar compras, e esse custo seria empurrado para o dia seguinte. Com ela, a operação é
+cíclica e pode se repetir diariamente.
+
+A equação (4) é a \textbf{dinâmica da bateria}: o estado de carga da próxima hora é o estado atual, mais a energia
+que entrou (a potência de carga vezes a eficiência de carga), menos a energia que saiu (a potência de descarga
+vezes a eficiência de descarga). É essa equação que \textbf{acopla as horas entre si}: sem ela teríamos 24
+problemas independentes, e com ela o modelo consegue guardar energia barata agora para usar mais tarde.''
+\end{fala}
+
+\noindent\textbf{Pontos-chave}
+\begin{itemize}
+  \item FOB: custo = $\sum_t c_t\,P^{\text{compra}}_t\,\Delta t$; renováveis e bateria têm custo nulo.
+  \item (2)+(3): condição inicial e condição \textbf{cíclica} ($\mathrm{SOC}$ final $=$ inicial).
+  \item (4): equação de estado, que \textbf{acopla o tempo} e permite a arbitragem de energia
+        (comprar barato à noite, usar de dia).
+  \item As eficiências $\mu$ aparecem na formulação para deixá-la geral, mas nesta instância valem 100\%.
+\end{itemize}
+
+\transicao{``Além da função objetivo e da dinâmica da bateria, o modelo precisa respeitar o balanço de potência
+e os limites operacionais, que estão no próximo slide.''}
+
+\medskip
+\noindent\textbf{Possíveis perguntas}
+\begin{itemize}
+  \item \emph{Por que não há receita pela venda de energia na FOB?} Optamos por não remunerar a injeção na rede;
+        o excedente pode ser cortado. Remunerar a venda seria só acrescentar um termo linear negativo na FOB.
+  \item \emph{O que acontece se carregar e descarregar na mesma hora?} Com eficiência de 100\%, carregar e descarregar
+        simultaneamente equivale a trocar só o saldo líquido, então não altera o custo. Em [2] isso é
+        impedido com variáveis binárias, o que tornaria o problema inteiro-misto (PLIM); no nosso caso não é necessário.
+\end{itemize}
+
+%======================================================================
+\section{Slide 9 -- Balanço de potência e limites operacionais}
+{\small\color{gray}Tempo sugerido: $\approx$ 1,5 min}
+\slideimg{09}
+
+\begin{fala}
+``A equação (5) é o \textbf{balanço de potência ativa}, escrito para cada hora. Como a microrrede é de barra
+única, basta uma equação por hora: \textbf{tudo o que entra na barra tem que ser igual a tudo o que sai}.
+
+Do lado esquerdo estão as fontes: a potência comprada da rede, a geração eólica menos o corte eólico,
+a geração solar menos o corte solar e a potência de descarga da bateria. Do lado direito estão os usos:
+a potência de carga da bateria e a demanda.
+
+O \textbf{corte de geração} é o que permite ao modelo descartar excedente renovável. Por exemplo, se a eólica
+estiver alta, a bateria já estiver cheia e a demanda estiver baixa, o modelo precisa de uma forma de fechar o
+balanço, e o corte cumpre esse papel.
+
+As demais equações são limites operacionais. A (6) mantém o estado de carga dentro da faixa permitida em
+todas as horas. A (7) e a (8) limitam as potências de carga e de descarga da bateria, que dependem do conversor
+e da própria bateria. Por fim, a (9) e a (10) limitam o corte eólico e o solar: o corte vai de zero até,
+no máximo, a geração disponível naquela hora, pois não se pode cortar mais do que está sendo gerado.''
+\end{fala}
+
+\noindent\textbf{Pontos-chave}
+\begin{itemize}
+  \item Balanço (5): \textbf{fontes} $=$ \textbf{usos}, uma equação por hora (barra única, sem perdas).
+  \item O corte de geração é a ``válvula de escape'' para o excedente renovável.
+  \item Limites (6)--(10): faixa de SOC, potência de carga e descarga e corte entre $0$ e a geração disponível.
+  \item Ao falar das equações (9) e (10), leia como
+        $0 \le P^{\text{corte,eol}}_t \le P^{\text{eol}}_t$ e $0 \le P^{\text{corte,sol}}_t \le P^{\text{sol}}_t$
+        (veja a nota abaixo).
+\end{itemize}
+
+\begin{alerta}[Atenção à notação do slide]
+Nas equações (9) e (10) os três termos aparecem com o mesmo símbolo
+($P^{\text{corte,eol}}_t \le P^{\text{corte,eol}}_t \le P^{\text{corte,eol}}_t$), sem os índices
+\emph{min} e \emph{max}. A banca pode perceber. Se não der para corrigir o slide, diga explicitamente que o
+limite inferior é zero e o superior é a geração disponível. Na equação (5) também há um erro de digitação
+(``decarga\_bat'' em vez de ``descarga,bat'').
+\end{alerta}
+
+\transicao{``Com o modelo completo, vale destacar suas propriedades e as hipóteses que adotamos.''}
+
+\medskip
+\noindent\textbf{Possíveis perguntas}
+\begin{itemize}
+  \item \emph{Houve corte de geração nos resultados?} Não. Para os perfis usados, nenhuma hora exigiu corte,
+        por isso esses gráficos foram omitidos nos resultados.
+  \item \emph{Por que não há perdas no balanço?} É uma hipótese simplificadora; o modelo de [2] inclui um termo
+        de perdas, que foi omitido aqui (ver slide 10).
+\end{itemize}
+
+%======================================================================
+\section{Slide 10 -- Propriedades, hipóteses e validação}
+{\small\color{gray}Tempo sugerido: $\approx$ 1 min}
+\slideimg{10}
+
+\begin{fala}
+``Aqui resumimos as propriedades do modelo.
+
+\textbf{Linearidade:} a função objetivo e todas as restrições são lineares. Em todos os termos, uma
+\textbf{constante multiplica uma variável}; não há produto entre variáveis, termos ao quadrado nem funções não
+lineares. Isso tem uma consequência importante: a região viável é um \textbf{poliedro convexo}, então
+qualquer ótimo local é também \textbf{ótimo global}, e a solução ótima está em um vértice desse poliedro.
+É exatamente isso que o método simplex explora.
+
+\textbf{Hipóteses:} adotamos um modelo determinístico, com barra única e sem perdas, e eficiências de 100\%.
+Foram escolhas conscientes para manter o problema linear. Em relação ao modelo de referência, também deixamos
+de fora os controles dos recursos distribuídos e o modelo de carga e descarga em duas camadas.
+
+\textbf{Dimensão e natureza:} o problema é pequeno e todas as variáveis de decisão são \textbf{contínuas}.
+O índice de tempo $t$ e o intervalo $\Delta t$ são inteiros, mas entram como dados do problema, não como
+variáveis. Portanto, não é um problema inteiro-misto.
+
+\textbf{Validação:} o modelo foi implementado em Python e verificamos que a solução obtida respeita as restrições
+do modelo.''
+\end{fala}
+
+\noindent\textbf{Pontos-chave}
+\begin{itemize}
+  \item Linear $\Rightarrow$ convexo $\Rightarrow$ ótimo local $=$ ótimo global $\Rightarrow$ simplex é adequado.
+  \item As hipóteses são \textbf{escolhas deliberadas} para manter o PL (é bom falar das limitações antes que a banca pergunte).
+  \item Variáveis contínuas; $t$ e $\Delta t$ são dados, então não há variáveis inteiras.
+\end{itemize}
+
+\begin{alerta}[Atenção: contagem de variáveis]
+O slide diz ``7 variáveis de decisão'', mas o resumo fala em ``4 decisões por hora, logo 96 variáveis''. Combinem
+antes da apresentação qual versão será dita. Uma forma consistente de explicar:
+\begin{itemize}[leftmargin=12pt]
+  \item \textbf{Na formulação}, por hora: $P^{\text{compra}}_t$, $P^{\text{carga,bat}}_t$, $P^{\text{descarga,bat}}_t$,
+        $P^{\text{corte,eol}}_t$, $P^{\text{corte,sol}}_t$ (5 decisões) e $\mathrm{SOC}_t$ (variável de estado).
+  \item \textbf{No código}, por hora: compra, venda (que faz o papel do corte), carga e descarga, ou seja,
+        4 variáveis $\times$ 24 h $=$ \textbf{96 variáveis contínuas}; o SOC é calculado como expressão.
+\end{itemize}
+\end{alerta}
+
+\transicao{``Definido o modelo, passamos ao método de solução e aos parâmetros usados.''}
+
+\medskip
+\noindent\textbf{Possíveis perguntas}
+\begin{itemize}
+  \item \emph{Como garantem que o ótimo é global?} Pela convexidade do PL: o conjunto viável é um poliedro e a
+        FOB é linear, então não existem ótimos locais que não sejam globais.
+  \item \emph{O que muda se as eficiências forem menores que 100\%?} O modelo continua linear, pois $\mu$ é constante.
+        O que tornaria o problema não linear (ou inteiro-misto) seria impedir carga e descarga simultâneas com binárias.
+\end{itemize}
+
+%======================================================================
+\section{Slide 11 -- Método de solução e parâmetros}
+{\small\color{gray}Tempo sugerido: $\approx$ 1 min}
+\slideimg{11}
+
+\begin{fala}
+``O problema é uma \textbf{programação linear contínua}, implementada em Python com a biblioteca de modelagem
+\textbf{Pyomo} e resolvida pelo solver \textbf{HiGHS}. Usamos a configuração padrão do solver, e ele escolheu
+internamente o \textbf{método Dual Simplex}. A escolha é adequada justamente porque a função objetivo, os
+balanços e os limites são todos lineares, sem variáveis inteiras.
+
+Sobre os parâmetros da instância: o horizonte é de \textbf{24 horas}, e a demanda é a do caso 1 de [2] acrescida
+de \textbf{345\,W} fixos.
+
+A bateria tem capacidade de \textbf{10.752\,Wh}, começa com \textbf{60\%} de carga (cerca de 6.451\,Wh) e deve
+permanecer entre \textbf{50\%} e \textbf{90\%}, isto é, entre 5.376 e 9.677\,Wh.
+
+As eficiências são de 100\%, a potência de carga e de descarga é limitada a \textbf{1.000\,W} e a compra da rede
+a \textbf{1.350\,W}.
+
+A tarifa é de \textbf{0,001 unidade monetária por watt-hora} fora do horário comercial (horas 0 a 4 e 18 a 23) e
+\textbf{dobra}, para 0,002, entre as horas 5 e 17. É essa diferença de preço que incentiva o modelo a comprar
+energia à noite e usar a bateria durante o dia.
+
+Não definimos limite de tempo, de iterações nem de tolerância: o HiGHS encontrou a solução ótima em
+\textbf{35 iterações}, com tempo de resolução de cerca de \textbf{0,01\,s}.''
+\end{fala}
+
+\noindent\textbf{Pontos-chave}
+\begin{itemize}
+  \item Ferramentas: Python + Pyomo (modelagem) + HiGHS (solver); o \textbf{Dual Simplex} foi escolhido pelo próprio HiGHS.
+  \item Números principais: 10.752\,Wh; SOC 60\% (faixa de 50 a 90\%); 1.000\,W de carga/descarga; 1.350\,W de compra.
+  \item A tarifa \textbf{dobra} entre 5 h e 17 h, e isso explica o comportamento visto nos resultados (compra à noite).
+  \item Critério de parada: padrão do HiGHS (otimalidade); 35 iterações, cerca de 0,01\,s.
+\end{itemize}
+
+\begin{alerta}[Atenção: unidades e valores]
+\begin{itemize}[leftmargin=12pt]
+  \item No slide está ``u.m./W'', mas a unidade correta da tarifa é \textbf{u.m./Wh}. Fale ``por watt-hora''.
+  \item O limite de carga/descarga no slide (\textbf{1.000\,W}) é o mesmo do código e do gráfico de potência do SAE.
+        O resumo estendido diz 1.200\,W, o que está errado. Se perguntarem, o valor correto é 1.000\,W.
+\end{itemize}
+\end{alerta}
+
+\transicao{``A seguir, mostramos os perfis de geração solar e eólica usados como entrada, e depois os resultados.''}
+
+\medskip
+\noindent\textbf{Possíveis perguntas}
+\begin{itemize}
+  \item \emph{Por que Dual Simplex e não pontos interiores?} Para um PL pequeno, o simplex é exato e rápido, e
+        termina em uma solução básica (vértice). O HiGHS escolhe o Dual Simplex por padrão para PLs desse porte.
+  \item \emph{Qual a diferença entre simplex primal e dual?} O primal mantém a viabilidade primal e busca a
+        otimalidade; o dual mantém a viabilidade dual (custos reduzidos com sinal ótimo) e busca a viabilidade primal.
+        Ambos terminam no mesmo ótimo.
+  \item \emph{O modelo escala?} Sim. Com 24 h o problema tem cerca de uma centena de variáveis; mesmo com
+        horizonte de uma semana ou passo de 15 min, um PL desse tamanho continua trivial para o HiGHS.
+\end{itemize}
+
+%======================================================================
+\newpage
+\section{Resumo rápido (cola de bolso)}
+
+\begin{tcolorbox}[colback=white, colframe=ufjf, boxrule=0.6pt, arc=2pt]
+\begin{itemize}
+  \item[\textbf{7}] Dados de entrada: solar, eólica, bateria, concessionária e demanda $\Rightarrow$ \textbf{tudo determinístico}.
+  \item[\textbf{8}] FOB: minimizar o custo de compra ($c_t \cdot P^{\text{compra}}_t \cdot \Delta t$).
+        SOC inicial $=$ SOC final (ciclo diário). A dinâmica do SOC acopla as horas.
+  \item[\textbf{9}] Balanço por hora: fontes $=$ usos. Corte entre $0$ e a geração disponível. Limites de SOC e de
+        carga/descarga.
+  \item[\textbf{10}] Linear $\Rightarrow$ convexo $\Rightarrow$ ótimo global. Hipóteses: determinístico, sem perdas,
+        $\mu = 100\%$. Variáveis contínuas.
+  \item[\textbf{11}] Pyomo + HiGHS (Dual Simplex). 10.752\,Wh, SOC entre 50 e 90\% (início em 60\%), 1.000\,W,
+        1.350\,W. Tarifa 0,001/0,002 u.m./Wh. 35 iterações, cerca de 0,01\,s.
+\end{itemize}
+\end{tcolorbox}
+
+\begin{alerta}[Para o grupo, antes da apresentação: possível erro no código]
+No notebook, a função \texttt{soc\_bat} retorna \texttt{SOC\_in} diretamente para \texttt{h == 23}, sem ligar
+esse valor a $\mathrm{SOC}_{22} + P^{\text{carga}}_{22} - P^{\text{descarga}}_{22}$. Com isso, a equação (4)
+deixa de valer na última transição: na solução, a bateria \textbf{descarrega 670\,W na hora 22 e mesmo assim o SOC
+sobe} de 5.376 para 6.451\,Wh (isso aparece no gráfico de SOC do slide 15). Refazendo o modelo com a dinâmica
+completa, a FOB passa de 2,6848 para cerca de \textbf{4,43\,u.m.} (com $\mathrm{SOC}_{23} = \mathrm{SOC}^{\text{ini}}$)
+ou \textbf{4,85\,u.m.} (com o SOC ao fim da hora 23 igual ao inicial). Como o slide 10 afirma que ``a solução
+respeitou todas as restrições'', vale corrigir o código e os resultados, ou pelo menos estar preparados caso a
+banca note o salto no gráfico de SOC.
+\end{alerta}
+
+\end{document}

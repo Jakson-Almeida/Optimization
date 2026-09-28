@@ -8,6 +8,23 @@ Z^{*} = 2684{,}8
 
 unidades monetárias. Toda a compra ocorre nas horas de tarifa baixa (\(c_t = 1\)); nas horas de tarifa 2 a microrrede não compra da rede. A venda à concessionária é nula em todo o horizonte: o excedente renovável é absorvido pela bateria.
 
+## Tabela resumida
+
+Para o resumo estendido, esta tabela substitui o despacho hora a hora. Os gráficos de compra, potência da bateria e SOC completam a leitura.
+
+| Indicador | Valor |
+|-----------|------:|
+| Status | ótimo |
+| Custo \(Z^{*}\) | 2684,8 u.m. |
+| Compra total | 2684,8 Wh |
+| Compra com \(c_t = 2\) | 0 |
+| Venda total | 0 |
+| Horas com compra | 1, 4 e 18 |
+| Compra nessas horas | 604,8; 1350; 730 W |
+| SOC inicial = SOC final | 6451,2 Wh |
+
+Na hora 4 o limite de compra (1350 W) fica ativo. Nas horas 5 a 17 a demanda é atendida por eólica, solar e bateria; o excedente renovável (horas 11, 12 e 14–17) carrega o armazenamento.
+
 ## Tabela principal
 
 Potências em W e SOC em Wh. Com passo de 1 h, o valor em W coincide com a energia da hora em Wh. A hora segue o índice do código (0 a 23).
