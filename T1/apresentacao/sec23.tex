@@ -1,0 +1,134 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb,booktabs}
+
+\usetheme{Madrid}
+\usecolortheme{whale}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamerfont{title}{size=\large}
+\setbeamerfont{frametitle}{size=\large}
+
+\title{Otimização da operação de uma microrrede via Programação Linear}
+\subtitle{Seções 2 e 3 --- Descrição, formulação e método}
+\author{Jakson da Rocha Almeida \and João Victor de Castro Nascimento \and Maicown José da Rocha}
+\institute{PPGE / UFJF --- 210143 Métodos de Otimização}
+
+\begin{document}
+
+%----------------------------------------------------------------------
+\begin{frame}{2.1 Descrição do problema}
+\begin{itemize}\setlength{\itemsep}{0.45em}
+  \item Microrrede conectada à concessionária, com GD solar e eólica e SAE, em barra única, baseada em Luna et al.\ [2].
+  \item Objetivo: despacho horário em $T=\{1,\ldots,24\}$, $\Delta t=1\,\mathrm{h}$, ao menor custo de compra.
+  \item Decisões: comprar da rede, carregar/descarregar o SAE e cortar excesso de GD.
+  \item Em cada $t\in T$: $P_t^{\mathrm{sol}}$, $P_t^{\mathrm{eol}}$, $P_t^{\mathrm{dem}}$, tarifa $c_t$, limites do SAE e de intercâmbio.
+  \item Simplificações em relação a [2]: sem controle hierárquico, sem modelo em duas camadas do SAE e sem perdas no balanço.
+\end{itemize}
+\end{frame}
+
+%----------------------------------------------------------------------
+\begin{frame}{2.2 Formulação --- objetivo e dinâmica do SOC}
+\begin{align}
+\min &\sum_{t=1}^{n_{\mathrm{horas}}} c_t\, P_t^{\mathrm{compra}}\,\Delta t
+\tag{1}\\
+\mathrm{SOC}_1 &= \mathrm{SOC}^{\mathrm{ini}},
+\qquad
+\mathrm{SOC}_n = \mathrm{SOC}^{\mathrm{ini}}
+\tag{2,3}\\
+\mathrm{SOC}_{t+1}
+&= \mathrm{SOC}_t
++ \mu_t^{\mathrm{carga}} P_t^{\mathrm{carga,bat}}
+- \mu_t^{\mathrm{descarga}} P_t^{\mathrm{descarga,bat}},
+\quad t\in[1,n-1]
+\tag{4}
+\end{align}
+\vspace{-0.4em}
+\begin{itemize}\setlength{\itemsep}{0.35em}
+  \item (1) minimiza o custo de compra, convertendo potência em energia por $\Delta t$.
+  \item (2)--(3) fixam o SOC inicial e o fecham no fim do dia.
+  \item (4) atualiza o SOC com carga, descarga e eficiências.
+\end{itemize}
+\end{frame}
+
+%----------------------------------------------------------------------
+\begin{frame}{2.2 Formulação --- balanço e limites}
+{\small
+\begin{align}
+\begin{aligned}
+&P_t^{\mathrm{compra}}+P_t^{\mathrm{eol}}-P_t^{\mathrm{corte,eol}}+P_t^{\mathrm{sol}}\\
+&\quad-P_t^{\mathrm{corte,sol}}+P_t^{\mathrm{descarga,bat}}
+= P_t^{\mathrm{carga,bat}}+P_t^{\mathrm{dem}}
+\end{aligned}
+\tag{5}\\[0.15em]
+\mathrm{SOC}_t^{\min} &\le \mathrm{SOC}_t \le \mathrm{SOC}_t^{\max}
+\tag{6}\\
+P_t^{\mathrm{carga,bat,min}} &\le P_t^{\mathrm{carga,bat}} \le P_t^{\mathrm{carga,bat,max}}
+\tag{7}\\
+P_t^{\mathrm{descarga,bat,min}} &\le P_t^{\mathrm{descarga,bat}} \le P_t^{\mathrm{descarga,bat,max}}
+\tag{8}\\
+0 &\le P_t^{\mathrm{corte,eol}} \le P_t^{\mathrm{eol}},
+\quad
+0 \le P_t^{\mathrm{corte,sol}} \le P_t^{\mathrm{sol}}
+\tag{9,10}
+\end{align}
+}
+\vspace{-0.35em}
+{\small (5) balanço horário; (6) faixa do SOC; (7)--(8) limites do SAE; (9)--(10) corte de eólica e solar.
+As variáveis de decisão são contínuas (Tabela~1); $t$ e $\Delta t$ entram como constantes.}
+\end{frame}
+
+%----------------------------------------------------------------------
+\begin{frame}{2.3 Hipóteses, propriedades e validação}
+\begin{itemize}\setlength{\itemsep}{0.4em}
+  \item \textbf{Linearidade:} FOB e restrições são afins --- constantes multiplicam variáveis; não há produtos nem termos quadráticos.
+  \item \textbf{Hipóteses:} modelo determinístico, barra única sem perdas, $\Delta t=1\,\mathrm{h}$ e eficiências de $100\%$, para permanecer em PL.
+  \item \textbf{Dimensão e natureza:} 4 decisões por hora $\times$ 24 h $=$ 96 variáveis contínuas; $t$ e $\Delta t$ são inteiros tratados como dados.
+  \item \textbf{Convexidade:} o viável é um poliedro e o objetivo é linear, logo todo ótimo local é global.
+  \item \textbf{Validação:} implementação em Python; a solução obtida respeitou todas as restrições do modelo.
+\end{itemize}
+\end{frame}
+
+%----------------------------------------------------------------------
+\begin{frame}{3. Método de solução e implementação}
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}
+\textbf{3.1 Método}\\[0.3em]
+{\small
+PL contínua resolvida pelo HiGHS via Pyomo, com Dual Simplex (escolha interna do solver). Adequado porque FOB, balanços e limites são lineares e não há inteiros.
+}
+\vspace{0.7em}
+
+\textbf{3.2 Implementação}\\[0.25em]
+{\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+Item & Registro \\
+\midrule
+Linguagem & Python \\
+Solver & Pyomo + HiGHS \\
+Hardware & Google Colab \\
+Código & repositório GitHub \\
+\bottomrule
+\end{tabular}
+}
+\end{column}
+\begin{column}{0.46\textwidth}
+\textbf{3.3 Parâmetros e parada}\\[0.3em]
+{\small
+\begin{itemize}\setlength{\itemsep}{0.28em}
+  \item Horizonte de 24 h; demanda do caso 1 + $345\,\mathrm{W}$.
+  \item SAE: $10752\,\mathrm{Wh}$; SOC inicial $60\%$, faixa $50$--$90\%$.
+  \item Eficiências $100\%$; carga/descarga até $1200\,\mathrm{W}$; compra até $1350\,\mathrm{W}$.
+  \item Tarifa $0{,}001$ u.m.\ (horas $0$--$4$ e $18$--$23$) e $0{,}002$ u.m.\ (horas $5$--$17$).
+  \item Parada padrão do HiGHS: Dual Simplex, 35 iterações, $0{,}01\,\mathrm{s}$ (ótimo).
+\end{itemize}
+}
+\end{column}
+\end{columns}
+\end{frame}
+
+\end{document}
