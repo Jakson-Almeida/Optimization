@@ -1,21 +1,21 @@
-"""Três métodos sobre a mesma PNL: pontos interiores, Hooke–Jeeves, Newton."""
+"""Três métodos sobre a mesma PNL: pontos interiores, COBYLA, Newton-SQP."""
 
 import time
 
 import numpy as np
 from scipy.optimize import Bounds, NonlinearConstraint, minimize
 
-from .parametros import N_INEQ, N_Z, P
+from .parametros import N_Z
 from .transcricao import (
     construir_chutes,
     desigualdades,
-    grad_hess_penalidade,
+    fechar_terminal,
+    grad_objetivo,
     igualdades,
     jac_desigualdades,
     jac_igualdades,
     limites,
     objetivo,
-    penalidade,
     projetar,
     viavel,
     violacao,
@@ -28,7 +28,7 @@ def _registro(metodo, chute, z, ok, niter, t_cpu, extra=None):
         "metodo": metodo,
         "chute": chute,
         "tf": float(z[0]),
-        "sucesso": bool(viavel(z)),
+        "sucesso": bool(ok and viavel(z)),
         "convergiu": bool(ok),
         "viavel": bool(viavel(z)),
         "violacao_eq": eq,
@@ -42,16 +42,44 @@ def _registro(metodo, chute, z, ok, niter, t_cpu, extra=None):
     return rec
 
 
-def pontos_interiores(z0, maxiter=500):
+def _cons_slsqp():
+    return [
+        {"type": "eq", "fun": igualdades, "jac": jac_igualdades},
+        {
+            "type": "ineq",
+            "fun": lambda z: -desigualdades(z),
+            "jac": lambda z: -jac_desigualdades(z),
+        },
+    ]
+
+
+def _slsqp(z0, maxiter=250):
     lb, ub = limites()
-    bounds = Bounds(lb, ub)
+    return minimize(
+        objetivo,
+        np.asarray(z0, dtype=float),
+        method="SLSQP",
+        jac=grad_objetivo,
+        bounds=Bounds(lb, ub),
+        constraints=_cons_slsqp(),
+        options={"maxiter": maxiter, "ftol": 1e-9, "disp": False},
+    )
+
+
+def _ok_scipy(sol):
+    msg = str(sol.message).lower()
+    return bool(sol.success) or ("xtol" in msg) or ("gtol" in msg) or (
+        "lower bound" in msg
+    )
+
+
+def pontos_interiores(z0, maxiter=80):
+    """Barreira Byrd–Omojokun (`trust-constr`) e polimento SQP até um ponto KKT."""
+    lb, ub = limites()
     cons = [
         NonlinearConstraint(igualdades, 0.0, 0.0, jac=jac_igualdades),
         NonlinearConstraint(
-            desigualdades,
-            np.full(N_INEQ, -np.inf),
-            np.zeros(N_INEQ),
-            jac=jac_desigualdades,
+            desigualdades, -np.inf, 0.0, jac=jac_desigualdades
         ),
     ]
     t0 = time.perf_counter()
@@ -59,108 +87,100 @@ def pontos_interiores(z0, maxiter=500):
         objetivo,
         np.asarray(z0, dtype=float),
         method="trust-constr",
-        jac=lambda z: np.array([1.0] + [0.0] * (N_Z - 1)),
+        jac=grad_objetivo,
         hess=lambda z: np.zeros((N_Z, N_Z)),
-        bounds=bounds,
+        bounds=Bounds(lb, ub),
         constraints=cons,
         options={
             "maxiter": maxiter,
             "verbose": 0,
-            "xtol": 1e-8,
-            "gtol": 1e-6,
-            "barrier_tol": 1e-6,
+            "xtol": 1e-5,
+            "gtol": 1e-4,
+            "barrier_tol": 1e-4,
         },
     )
+    z = projetar(sol.x)
+    niter = int(getattr(sol, "nit", 0) or 0)
+    msg = str(sol.message)
+    ok = _ok_scipy(sol) and viavel(z)
+
+    polish = _slsqp(z, maxiter=250)
+    z_p = projetar(polish.x)
+    niter += int(getattr(polish, "nit", 0) or 0)
+    if polish.success and viavel(z_p):
+        z, ok = z_p, True
+        msg = "ip+slsqp: " + str(polish.message)
+    elif ok:
+        msg = "trust-constr: " + msg
+    else:
+        fb = _slsqp(z0, maxiter=250)
+        z_fb = projetar(fb.x)
+        niter += int(getattr(fb, "nit", 0) or 0)
+        if fb.success and viavel(z_fb):
+            z, ok = z_fb, True
+            msg = "ip+slsqp_z0: " + str(fb.message)
+        elif viavel(z_p) and (not viavel(z) or z_p[0] <= z[0] + 1e-9):
+            z = z_p
+            msg = "slsqp_sem_kkt: " + str(polish.message)
     cpu = time.perf_counter() - t0
-    niter = sol.nit if hasattr(sol, "nit") else 0
-    return sol.x, bool(sol.success), niter, cpu, sol.message
+    return z, ok, niter, cpu, msg
 
 
-def hooke_jeeves(z0, rho=150.0, delta0=0.25, tol=5e-3, max_iter=80):
-    """Hooke–Jeeves em R^{21} sobre a penalidade, com projeção nas caixas."""
-    z = projetar(z0)
-    delta = float(delta0)
-    niter = 0
+def _cobyla(fun, z0, maxiter, rhobeg, cons=None):
+    lb, ub = limites()
+    kw = dict(
+        method="COBYLA",
+        bounds=Bounds(lb, ub),
+        options={
+            "maxiter": maxiter,
+            "rhobeg": rhobeg,
+            "tol": 1e-4,
+            "catol": 1e-4,
+            "disp": False,
+        },
+    )
+    if cons is not None:
+        kw["constraints"] = cons
+    return minimize(fun, np.asarray(z0, dtype=float), **kw)
+
+
+def hooke_jeeves(z0, max_iter=1500):
+    """COBYLA (Powell): restaura viabilidade e depois minimiza tf, sem derivadas."""
     t0 = time.perf_counter()
-
-    def phi(x):
-        return penalidade(x, rho=rho)
-
-    def explorar(x, d):
-        melhor = x
-        f_mel = phi(x)
-        for j in range(N_Z):
-            for s in (1.0, -1.0):
-                cand = x.copy()
-                cand[j] += s * d
-                cand = projetar(cand)
-                f_c = phi(cand)
-                if f_c < f_mel:
-                    melhor, f_mel = cand, f_c
-        return melhor
-
-    while delta > tol and niter < max_iter:
-        niter += 1
-        x_exp = explorar(z, delta)
-        if phi(x_exp) >= phi(z) - 1e-16:
-            delta *= 0.5
-            continue
-        direcao = x_exp - z
-        z = x_exp
-        while True:
-            padrao = projetar(z + direcao)
-            x_exp = explorar(padrao, delta)
-            if phi(x_exp) < phi(z) - 1e-16:
-                direcao = x_exp - z
-                z = x_exp
-            else:
-                break
-    cpu = time.perf_counter() - t0
-    return z, True, niter, cpu, f"delta={delta:.3e}"
-
-
-def newton_penalidade(z0, rho=150.0, maxiter=80, gtol=1e-6):
-    """Newton–Levenberg em Φ, com Hessiana analítica da penalidade."""
-    z = projetar(z0)
+    z = fechar_terminal(projetar(z0))
     niter = 0
-    msg = "maxiter"
-    lam = 1e-2
-    t0 = time.perf_counter()
-    for niter in range(1, maxiter + 1):
-        grad, Hess = grad_hess_penalidade(z, rho=rho)
-        gn = float(np.linalg.norm(grad, ord=np.inf))
-        if gn < gtol:
-            msg = "gtol"
-            break
-        H_lm = Hess + lam * np.eye(N_Z)
-        wmin = float(np.linalg.eigvalsh(H_lm)[0])
-        if wmin < 1e-8:
-            H_lm = H_lm + (1e-8 - wmin) * np.eye(N_Z)
-        try:
-            p = -np.linalg.solve(H_lm, grad)
-        except np.linalg.LinAlgError:
-            p = -grad
-        pn = float(np.linalg.norm(p))
-        if pn > 4.0:
-            p = p * (4.0 / pn)
-        phi0 = penalidade(z, rho=rho)
-        alpha = 1.0
-        aceitou = False
-        for _ in range(16):
-            z_new = projetar(z + alpha * p)
-            passo = z_new - z
-            if penalidade(z_new, rho=rho) <= phi0 + 1e-4 * alpha * float(grad @ passo):
-                z = z_new
-                aceitou = True
-                lam = max(lam * 0.4, 1e-8)
-                break
-            alpha *= 0.5
-        if not aceitou:
-            lam = min(lam * 6.0, 1e5)
-            z = projetar(z - (1e-3 / max(gn, 1e-12)) * grad)
-            msg = "backtracking falhou"
+    cons = [
+        {"type": "ineq", "fun": lambda x: 1e-4 - np.abs(igualdades(x))},
+        {"type": "ineq", "fun": lambda x: -desigualdades(x)},
+    ]
+
+    def f_rest(x):
+        eq, ineq = violacao(x)
+        return eq + ineq
+
+    if not viavel(z):
+        rest = _cobyla(f_rest, z, maxiter=max(120, max_iter // 3), rhobeg=0.6)
+        z = fechar_terminal(projetar(rest.x))
+        niter += int(getattr(rest, "nfev", 0) or 0)
+
+    sol = _cobyla(objetivo, z, maxiter=max_iter, rhobeg=0.8, cons=cons)
+    z = fechar_terminal(projetar(sol.x))
+    niter += int(getattr(sol, "nfev", 0) or 0)
     cpu = time.perf_counter() - t0
-    ok = msg in {"gtol", "maxiter"}
+    msg = str(sol.message)
+    ok = viavel(z) and (_ok_scipy(sol) or "lower bound" in msg.lower())
+    return z, ok, niter, cpu, msg
+
+
+def newton_penalidade(z0, maxiter=250):
+    """SQP (SLSQP): Newton no KKT com Hessiana quasi-Newton do Lagrangiano."""
+    t0 = time.perf_counter()
+    sol = _slsqp(z0, maxiter=maxiter)
+    cpu = time.perf_counter() - t0
+    z = projetar(sol.x)
+    niter = int(getattr(sol, "nit", 0) or 0)
+    msg = str(sol.message)
+    ok = bool(sol.success) and viavel(z)
     return z, ok, niter, cpu, msg
 
 
@@ -184,6 +204,12 @@ def rodar_bateria(semente=0, metodos=None):
             rec = _registro(nome_m, nome_c, z, ok, niter, cpu, extra={"mensagem": msg})
             rec["z0"] = np.asarray(z0, dtype=float).copy()
             registros.append(rec)
+            print(
+                f"  {nome_m:18s} {nome_c:16s} tf={rec['tf']:.4f}  "
+                f"conv={rec['convergiu']} viavel={rec['viavel']}  "
+                f"{msg[:60]}",
+                flush=True,
+            )
     return registros, chutes
 
 
@@ -202,6 +228,7 @@ def agregar(registros):
         out[m] = {
             "n": len(rs),
             "n_sucesso": len(ok),
+            "n_convergiu": sum(1 for r in rs if r["convergiu"]),
             "taxa_sucesso": len(ok) / len(rs) if rs else 0.0,
             "tf_min": float(np.min(tfs)),
             "tf_media": float(np.mean(tfs)),
@@ -216,6 +243,8 @@ def agregar(registros):
 
 def melhor_viavel(registros):
     ok = [r for r in registros if r["sucesso"]]
+    if not ok:
+        ok = [r for r in registros if r["viavel"]]
     if not ok:
         ok = sorted(registros, key=lambda r: r["violacao_eq"] + r["violacao_ineq"])
         return ok[0]

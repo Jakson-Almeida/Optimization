@@ -333,8 +333,9 @@ def jac_desigualdades(z):
     return J
 
 
-def _hessiana_obstaculo(tr, sens, idx, zeta):
-    qs = _amostras_q(tr)
+def _hessiana_obstaculo(tr, sens, idx, zeta, qs=None):
+    if qs is None:
+        qs = _amostras_q(tr)
     qk = qs[idx]
     _, dg_dq, Hg_q = _fk_derivadas(qk[0], qk[1], zeta)
     Jq1 = _coluna_q_amostra(sens, tr, 0, idx)
@@ -398,6 +399,52 @@ def grad_hess_penalidade(z, rho=20.0):
     return grad, Hess
 
 
+def hess_igualdades(z, v):
+    """Σ v_i ∇² h_i, para o Lagrangian do trust-constr."""
+    _, sens = sensibilidades(z)
+    H = np.zeros((N_Z, N_Z))
+    blocos = [
+        _hessiana_q(sens, 0, P.K),
+        _hessiana_q(sens, 1, P.K),
+        _hessiana_v(sens, 0, P.K),
+        _hessiana_v(sens, 1, P.K),
+    ]
+    for vi, Hi in zip(np.asarray(v, dtype=float).reshape(-1), blocos):
+        if abs(vi) > 1e-16:
+            H += float(vi) * Hi
+    return H
+
+
+def hess_desigualdades(z, v):
+    """Σ v_i ∇² g_i, só nas componentes com multiplicador não nulo."""
+    tr, sens = sensibilidades(z)
+    H = np.zeros((N_Z, N_Z))
+    qs = None
+    for ia, vi in enumerate(np.asarray(v, dtype=float).reshape(-1)):
+        if abs(vi) < 1e-12:
+            continue
+        if ia < N_VEL:
+            knot = ia // 4
+            resto = ia % 4
+            junta = resto // 2
+            sinal = 1.0 if (resto % 2 == 0) else -1.0
+            H += float(vi) * sinal * _hessiana_v(sens, junta, knot)
+        else:
+            if qs is None:
+                qs = _amostras_q(tr)
+            j = ia - N_VEL
+            idx = j // P.n_zeta
+            zeta = ZETA[j % P.n_zeta]
+            H += float(vi) * _hessiana_obstaculo(tr, sens, idx, zeta, qs=qs)
+    return H
+
+
+def merita_l1(z, rho=20.0):
+    h = igualdades(z)
+    g = desigualdades(z)
+    return float(z[0] + rho * (np.sum(np.abs(h)) + np.sum(np.maximum(g, 0.0))))
+
+
 def checar_jacobiana(z, eps=1e-6):
     """Diferenças finitas vs. Jacobiana analítica. Devolve erros relativos."""
     z = np.asarray(z, dtype=float).reshape(-1)
@@ -453,6 +500,20 @@ def _acel_rest_discreto(dq, n_int, h, amax):
     return np.clip(melhor, -amax, amax)
 
 
+def fechar_terminal(z):
+    """Ajusta a_{K-2}, a_{K-1} de cada junta para q(tf)=qf e v(tf)=0 (forma fechada)."""
+    tf, a = unpack(z)
+    h = tf / P.K
+    tr = integrar(z)
+    for j in range(2):
+        qkm2 = tr.q[j, P.K - 2]
+        vkm2 = tr.v[j, P.K - 2]
+        s = -vkm2 / h
+        a[j, -2] = (P.qf[j] - qkm2 - 2.0 * h * vkm2) / (h * h) - 0.5 * s
+        a[j, -1] = s - a[j, -2]
+    return projetar(pack(tf, a))
+
+
 def _acel_from_q(q, h):
     """Reproduz q[0..K-2] com v_0=0; os dois últimos a fecham q_K e v_K=0."""
     a = np.zeros(P.K)
@@ -480,7 +541,7 @@ def caminho_cspace_livre(n_grid=90):
     livre = np.empty((n_grid, n_grid), dtype=bool)
     for i, qq2 in enumerate(q2s):
         for j, qq1 in enumerate(q1s):
-            livre[i, j] = min_folga(qq1, qq2) <= -2e-3
+            livre[i, j] = min_folga(qq1, qq2) <= -8e-3
 
     def idx(q1, q2):
         j = int(np.clip(np.argmin(np.abs(q1s - q1)), 0, n_grid - 1))
@@ -552,7 +613,7 @@ def chute_desvio(tf=None, via=None):
         tf0 = float(np.clip(tf0, P.tf_min, P.tf_max))
         h0 = tf0 / P.K
         a_ref = np.vstack([_acel_from_q(q[0], h0), _acel_from_q(q[1], h0)])
-    return pack(tf0, a_ref)
+    return fechar_terminal(pack(tf0, a_ref))
 
 
 def construir_chutes(semente=0):
@@ -563,10 +624,17 @@ def construir_chutes(semente=0):
     chutes = [z_reta, z_desvio]
     nomes = ["reta_juntas", "desvio_esquerda"]
     for i in range(3):
-        ruido = rng.normal(0.0, 0.8, size=N_A)
         z = z_desvio.copy()
-        z[1:] = np.clip(z[1:] + ruido, -P.a_max, P.a_max)
-        z[0] = float(np.clip(z[0] + rng.normal(0.0, 0.15), P.tf_min, P.tf_max))
+        for _ in range(25):
+            ruido = rng.normal(0.0, 0.35, size=N_A)
+            cand = z_desvio.copy()
+            cand[1:] = np.clip(cand[1:] + ruido, -P.a_max, P.a_max)
+            cand[0] = float(np.clip(cand[0] + rng.normal(0.0, 0.08), P.tf_min, P.tf_max))
+            cand = fechar_terminal(cand)
+            if viavel(cand):
+                z = cand
+                break
+            z = cand
         chutes.append(z)
         nomes.append(f"desvio_ruido_{i + 1}")
     return list(zip(nomes, chutes))

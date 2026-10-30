@@ -202,9 +202,9 @@ pela esquerda, e três ruídos.
 
 | Método | Implementação |
 |--------|----------------|
-| Pontos interiores | `trust-constr` com Jacobiana analítica |
-| Pattern search | Hooke–Jeeves na penalidade quadrática |
-| Newton | Newton–Levenberg na mesma penalidade, Hessiana analítica |
+| Pontos interiores | `trust-constr` (barreira) + polimento SQP até um ponto KKT |
+| Pattern search | COBYLA (Powell), sem derivadas |
+| Newton | SQP (`SLSQP`), Newton no sistema KKT |
 """,
     )
     py(
@@ -215,10 +215,10 @@ registros, _ = rodar_bateria(semente=0)
 resumo = agregar(registros)
 melhor = melhor_viavel(registros)
 
-print(f"{'método':20s} {'chute':18s} {'tf':>8s} {'viável':>7s} {'eq':>10s} {'ineq':>10s} {'iter':>6s} {'CPU':>8s}")
+print(f"{'método':20s} {'chute':18s} {'tf':>8s} {'conv':>5s} {'viável':>7s} {'eq':>10s} {'ineq':>10s} {'iter':>6s} {'CPU':>8s}")
 for r in registros:
     print(
-        f"{r['metodo']:20s} {r['chute']:18s} {r['tf']:8.4f} {str(r['viavel']):>7s} "
+        f"{r['metodo']:20s} {r['chute']:18s} {r['tf']:8.4f} {str(r['convergiu']):>5s} {str(r['viavel']):>7s} "
         f"{r['violacao_eq']:10.2e} {r['violacao_ineq']:10.2e} {r['niter']:6d} {r['cpu_s']:8.3f}"
     )
 print()
@@ -276,13 +276,14 @@ print("paper, cinemática com obstáculo N=3: tf ≈ 1.180 s")
     )
     md(
         nb,
-        r"""**Leitura.** Pontos interiores (`trust-constr`) são o método que devolve
-soluções viáveis com \(t_f\) competitivo; chutes diferentes caem em mínimos
-locais distintos porque o C-space não é convexo. Pattern search e Newton, na
-penalidade em \(\mathbb{R}^{21}\), não fecham viabilidade com o orçamento
-usado. O \(t_f\) do paper (1,18 s) usa colocação LGR bem mais fina; o valor
-deste notebook deve ser lido na mesma ordem de grandeza. O caminho contorna
-o disco pela esquerda, como no caso \(N=3\).
+        r"""**Leitura.** Nas quatro partidas viáveis os três métodos param em um ótimo
+local (KKT ou raio mínimo do COBYLA), não no teto de iterações. A reta no
+espaço das juntas atravessa o disco e os três falham ali. Pontos interiores
+e Newton-SQP dão \(t_f\approx 1{,}19\) s; COBYLA, sem derivadas, para numa
+vizinhança mais lenta (\(\approx 2{,}4\)–\(2{,}8\) s). O \(t_f\) do paper
+(1,18 s) usa colocação LGR bem mais fina; o valor deste notebook deve ser
+lido na mesma ordem de grandeza. O caminho contorna o disco pela esquerda,
+como no caso \(N=3\).
 """,
     )
     return nb

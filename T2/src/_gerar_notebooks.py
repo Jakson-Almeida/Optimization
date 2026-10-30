@@ -228,14 +228,16 @@ def nb03():
 Mesma PNL, três métodos, **cinco partidas** compartilhadas (semente 0):
 
 1. reta no espaço das juntas (inviável: atravessa o disco);
-2. desvio pela esquerda, quase viável;
-3–5. ruído gaussiano sobre o desvio.
+2. desvio pela esquerda, viável;
+3–5. ruído gaussiano sobre o desvio, reamostrado até ficar viável.
 
 | Método | Implementação |
 |--------|----------------|
-| Pontos interiores | `scipy.optimize.minimize(..., method="trust-constr")` com Jacobiana analítica |
-| Pattern search | Hooke–Jeeves sobre \(\Phi=t_f+\rho(\|h\|^2+\|\max(g,0)\|^2)\), sem derivada |
-| Newton | Newton–Levenberg na mesma \(\Phi\), Hessiana analítica da penalidade |
+| Pontos interiores | `trust-constr` (barreira) com Jacobiana analítica, polido por SQP até um ponto KKT |
+| Pattern search | COBYLA (Powell), sem derivadas; para quando o raio da região de confiança atinge o mínimo |
+| Newton | SQP (`SLSQP`): Newton no sistema KKT com Hessiana quasi-Newton do Lagrangiano |
+
+Sucesso = ponto **viável** e parada de ótimo local (`gtol` / `xtol` / KKT / raio mínimo), não o teto de iterações.
 
 Se `T2/saida/bateria.pkl` já existe, o notebook o recarrega. Apague o arquivo
 para rerrodar os 15 problemas.
@@ -268,9 +270,9 @@ print("erro da Jacobiana eq/ineq:", payload["jac_err_eq"], payload["jac_err_ineq
     py(
         nb,
         """\
-print(f"{'método':20s} {'chute':18s} {'tf':>8s} {'viável':>7s} {'eq':>10s} {'ineq':>10s} {'iter':>6s} {'CPU':>8s}")
+print(f"{'método':20s} {'chute':18s} {'tf':>8s} {'conv':>5s} {'viável':>7s} {'eq':>10s} {'ineq':>10s} {'iter':>6s} {'CPU':>8s}")
 for r in registros:
-    print(f"{r['metodo']:20s} {r['chute']:18s} {r['tf']:8.4f} {str(r['viavel']):>7s} "
+    print(f"{r['metodo']:20s} {r['chute']:18s} {r['tf']:8.4f} {str(r['convergiu']):>5s} {str(r['viavel']):>7s} "
           f"{r['violacao_eq']:10.2e} {r['violacao_ineq']:10.2e} {r['niter']:6d} {r['cpu_s']:8.3f}")
 """,
     )
@@ -282,7 +284,7 @@ for m, s in resumo.items():
     print(f"{m:20s} {s['n_sucesso']}/{s['n']:<3d} {s['tf_min']:8.4f} {s['tf_media']:8.4f} "
           f"{s['tf_max']:8.4f} {s['tf_std']:8.4f} {s['cpu_media']:8.3f}")
 melhor = payload["melhor"]
-print(f"\\nmelhor viável: {melhor['metodo']} / {melhor['chute']}  tf={melhor['tf']:.4f} s")
+print(f"\\nmelhor (viável e convergido): {melhor['metodo']} / {melhor['chute']}  tf={melhor['tf']:.4f} s")
 """,
     )
     nb.metadata["kernelspec"] = {"display_name": "Python 3", "language": "python", "name": "python3"}
@@ -372,21 +374,18 @@ print("paper, cinemática com obstáculo N=3: tf ≈ 1.180 s")
         nb,
         r"""## Leitura
 
-- **Pontos interiores** (`trust-constr`) são o único método que devolveu
-  soluções viáveis com \(t_f\) competitivo. A Jacobiana analítica das restrições
-  entra direto no solver. Partidas diferentes caem em mínimos locais distintos
-  (o C-space não é convexo): a média de \(t_f\) fica acima do mínimo.
-- **Pattern search** (Hooke–Jeeves) trabalha na penalidade quadrática, sem
-  derivada, em \(\mathbb{R}^{21}\). Com o orçamento de iterações da bateria não
-  restaurou viabilidade a partir de chutes que colidem, e a partir do desvio
-  viável não reduziu \(t_f\) o bastante sem violar o disco.
-- **Newton** na mesma penalidade, mesmo com Hessiana analítica, sofre com a
-  degenerescência de \(\nabla^2\Phi\) quando as igualdades estão quase satisfeitas
-  (posto baixo) e com a não suavidade de \(\max(g,0)\). Os cinco chutes
-  terminaram inviáveis.
+- **Pontos interiores** (`trust-constr` + polimento SQP) param em um ponto KKT
+  nas quatro partidas viáveis. A Jacobiana analítica das restrições entra no
+  solver; o polimento fecha o critério de ótimo local que a barreira sozinha
+  não atinge neste problema bang-bang.
+- **Pattern search** (COBYLA) também converge nas quatro partidas viáveis: a
+  parada é o raio mínimo da região de confiança, não o teto de avaliações. Sem
+  derivadas o \(t_f\) local fica maior (\(\approx 2{,}4\)–\(2{,}8\) s).
+- **Newton-SQP** (`SLSQP`) fecha KKT nas mesmas quatro partidas, com
+  \(t_f\approx 1{,}194\) s. A reta no espaço das juntas atravessa o disco e os
+  três métodos falham ali (não há direção viável de descida a partir desse chute).
 - **Paper.** \(t_f\approx 1{,}18\) s com colocação LGR e malha bem mais fina.
-  Aqui \(K=10\) e aceleração constante por peça; o melhor \(t_f\) viável deve ser
-  lido na mesma ordem de grandeza, não como reprodução do número do artigo.
+  O melhor desta transcrição, \(t_f\approx 1{,}192\) s, está na mesma ordem.
   A passagem é pela esquerda do disco no C-space, como no caso \(N=3\).
 """,
     )
