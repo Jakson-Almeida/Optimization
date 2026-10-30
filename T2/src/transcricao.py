@@ -1,6 +1,6 @@
 """Transcrição da PNL: decisão z, integração, restrições, Jacobiana e Hessiana.
 
-z = (tf, a1_0..a1_{K-1}, a2_0..a2_{K-1}) in R^{21}
+z = (tf, a1_0..a1_{K-1}, a2_0..a2_{K-1}) in R^{1+2K}
 
 A aceleração é constante em cada intervalo. A cadeia q̈ = a integra-se em
 forma fechada. q e v não são variáveis de decisão.
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .cinematica import ponto_elo2
+from .cinematica import min_folga, ponto_elo2
 from .parametros import N_A, N_EQ, N_INEQ, N_OBS, N_VEL, N_Z, P, ZETA
 
 
@@ -20,6 +20,11 @@ def n_decisao():
 
 def unpack(z):
     z = np.asarray(z, dtype=float).reshape(-1)
+    if z.size != N_Z:
+        raise ValueError(
+            f"z tem {z.size} componentes, esperado {N_Z} (K={P.K}). "
+            "A bateria foi gravada com outro K; apague saida/bateria.pkl e rode de novo."
+        )
     tf = float(z[0])
     a = np.empty((2, P.K), dtype=float)
     a[0] = z[1 : 1 + P.K]
@@ -534,8 +539,6 @@ def caminho_cspace_livre(n_grid=90):
     """Polilinha em (q1, q2) de q0 a qf que contorna o disco no C-space."""
     from collections import deque
 
-    from .cinematica import min_folga
-
     q1s = np.linspace(P.q1_lim[0], min(P.q1_lim[1], 1.45), n_grid)
     q2s = np.linspace(P.q2_lim[0], P.q2_lim[1], n_grid)
     livre = np.empty((n_grid, n_grid), dtype=bool)
@@ -600,20 +603,37 @@ def chute_reta(tf=0.55):
     return pack(tf, np.vstack([a1, a2]))
 
 
+def _suavizar_q(q, npassos=8):
+    """Média móvel nas juntas, extremos fixos em q0 e qf."""
+    q = np.asarray(q, dtype=float).copy()
+    for _ in range(npassos):
+        q[:, 1:-1] = 0.25 * q[:, :-2] + 0.5 * q[:, 1:-1] + 0.25 * q[:, 2:]
+    q[:, 0] = P.q0
+    q[:, -1] = P.qf
+    return q
+
+
 def chute_desvio(tf=None, via=None):
     """Segue um caminho livre no C-space (contorna o disco pela esquerda)."""
     del via
-    q = caminho_cspace_livre()
-    tf0 = 2.0 if tf is None else float(tf)
-    h0 = tf0 / P.K
-    a_ref = np.vstack([_acel_from_q(q[0], h0), _acel_from_q(q[1], h0)])
-    need = float(np.max(np.abs(a_ref)))
-    if tf is None and need > P.a_max:
-        tf0 = tf0 * np.sqrt(need / P.a_max) * 1.08
+    q = _suavizar_q(caminho_cspace_livre())
+    tf0 = 2.5 if tf is None else float(tf)
+
+    def _a(tf_):
+        h = float(tf_) / P.K
+        return np.vstack([_acel_from_q(q[0], h), _acel_from_q(q[1], h)])
+
+    a_ref = _a(tf0)
+    if tf is None:
+        need = float(np.max(np.abs(a_ref)))
+        if need > P.a_max:
+            tf0 = tf0 * np.sqrt(need / P.a_max) * 1.06
         tf0 = float(np.clip(tf0, P.tf_min, P.tf_max))
-        h0 = tf0 / P.K
-        a_ref = np.vstack([_acel_from_q(q[0], h0), _acel_from_q(q[1], h0)])
-    return fechar_terminal(pack(tf0, a_ref))
+        a_ref = _a(tf0)
+    z = pack(tf0, a_ref)
+    if float(np.max(np.abs(a_ref))) > P.a_max + 1e-9:
+        z = fechar_terminal(z)
+    return z
 
 
 def construir_chutes(semente=0):
@@ -625,16 +645,15 @@ def construir_chutes(semente=0):
     nomes = ["reta_juntas", "desvio_esquerda"]
     for i in range(3):
         z = z_desvio.copy()
-        for _ in range(25):
-            ruido = rng.normal(0.0, 0.35, size=N_A)
+        for _ in range(40):
+            ruido = rng.normal(0.0, 0.12, size=N_A)
             cand = z_desvio.copy()
             cand[1:] = np.clip(cand[1:] + ruido, -P.a_max, P.a_max)
-            cand[0] = float(np.clip(cand[0] + rng.normal(0.0, 0.08), P.tf_min, P.tf_max))
+            cand[0] = float(np.clip(cand[0] + rng.normal(0.0, 0.05), P.tf_min, P.tf_max))
             cand = fechar_terminal(cand)
             if viavel(cand):
                 z = cand
                 break
-            z = cand
         chutes.append(z)
         nomes.append(f"desvio_ruido_{i + 1}")
     return list(zip(nomes, chutes))

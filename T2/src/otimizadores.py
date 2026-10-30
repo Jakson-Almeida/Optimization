@@ -53,7 +53,7 @@ def _cons_slsqp():
     ]
 
 
-def _slsqp(z0, maxiter=250):
+def _slsqp(z0, maxiter=500):
     lb, ub = limites()
     return minimize(
         objetivo,
@@ -73,7 +73,7 @@ def _ok_scipy(sol):
     )
 
 
-def pontos_interiores(z0, maxiter=80):
+def pontos_interiores(z0, maxiter=40):
     """Barreira Byrd–Omojokun (`trust-constr`) e polimento SQP até um ponto KKT."""
     lb, ub = limites()
     cons = [
@@ -104,7 +104,7 @@ def pontos_interiores(z0, maxiter=80):
     msg = str(sol.message)
     ok = _ok_scipy(sol) and viavel(z)
 
-    polish = _slsqp(z, maxiter=250)
+    polish = _slsqp(z, maxiter=500)
     z_p = projetar(polish.x)
     niter += int(getattr(polish, "nit", 0) or 0)
     if polish.success and viavel(z_p):
@@ -113,7 +113,7 @@ def pontos_interiores(z0, maxiter=80):
     elif ok:
         msg = "trust-constr: " + msg
     else:
-        fb = _slsqp(z0, maxiter=250)
+        fb = _slsqp(z0, maxiter=500)
         z_fb = projetar(fb.x)
         niter += int(getattr(fb, "nit", 0) or 0)
         if fb.success and viavel(z_fb):
@@ -144,7 +144,7 @@ def _cobyla(fun, z0, maxiter, rhobeg, cons=None):
     return minimize(fun, np.asarray(z0, dtype=float), **kw)
 
 
-def hooke_jeeves(z0, max_iter=1500):
+def hooke_jeeves(z0, max_iter=800):
     """COBYLA (Powell): restaura viabilidade e depois minimiza tf, sem derivadas."""
     t0 = time.perf_counter()
     z = fechar_terminal(projetar(z0))
@@ -172,7 +172,7 @@ def hooke_jeeves(z0, max_iter=1500):
     return z, ok, niter, cpu, msg
 
 
-def newton_penalidade(z0, maxiter=250):
+def newton_penalidade(z0, maxiter=500):
     """SQP (SLSQP): Newton no KKT com Hessiana quasi-Newton do Lagrangiano."""
     t0 = time.perf_counter()
     sol = _slsqp(z0, maxiter=maxiter)

@@ -17,9 +17,9 @@ class Parametros:
     y0_obs: float = 0.25
     R_obs: float = 0.1
     n_zeta: int = 3
-    K: int = 10
+    K: int = 50
     tf_min: float = 0.2
-    tf_max: float = 5.0
+    tf_max: float = 8.0
     # C-space do paper (seção 4.4), para a figura de convexidade.
     q1_lim: tuple = (0.0, 0.5 * np.pi)
     q2_lim: tuple = (-2.0 * np.pi / 3.0, 0.0)
@@ -29,7 +29,7 @@ P = Parametros()
 
 ZETA = tuple((i / P.n_zeta) for i in range(1, P.n_zeta + 1))  # 1/3, 2/3, 1
 N_A = 2 * P.K
-N_Z = 1 + N_A  # 21
+N_Z = 1 + N_A  # tf + 2K acelerações
 N_EQ = 4  # q1(tf), q2(tf), v1(tf), v2(tf)
 N_VEL = 2 * 2 * (P.K + 1)  # duas juntas, ±, em cada nó
 N_NOS_OBS = P.K + 1 + P.K  # nós e pontos médios dos intervalos

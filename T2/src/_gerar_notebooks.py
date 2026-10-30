@@ -91,8 +91,8 @@ print("K =", P.K, "dimensão de z =", n_decisao(), "igualdades =", N_EQ, "desigu
         nb,
         r"""## PNL discreta
 
-Decisão \(\mathbf{z}=(t_f,\,a_{1,0},\ldots,a_{1,K-1},\,a_{2,0},\ldots,a_{2,K-1})\in\mathbb{R}^{21}\),
-\(K=10\), \(h=t_f/K\):
+Decisão \(\mathbf{z}=(t_f,\,a_{1,0},\ldots,a_{1,K-1},\,a_{2,0},\ldots,a_{2,K-1})\in\mathbb{R}^{101}\),
+\(K=50\), \(h=t_f/K\):
 
 \[
 v_{i,k+1}=v_{i,k}+h a_{i,k},\qquad
@@ -144,7 +144,7 @@ def nb02():
 
 Antes de otimizar, classifica-se cada peça da PNL. As derivadas saem do SymPy,
 sem diferenças finitas. A figura do C-space é a “cara” da região viável em
-\((q_1,q_2)\); a PNL em \(\mathbb{R}^{21}\) é um levantamento dessa geometria
+\((q_1,q_2)\); a PNL em \(\mathbb{R}^{101}\) é um levantamento dessa geometria
 com \(t_f\) e as acelerações.
 """,
     )
@@ -239,31 +239,21 @@ Mesma PNL, três métodos, **cinco partidas** compartilhadas (semente 0):
 
 Sucesso = ponto **viável** e parada de ótimo local (`gtol` / `xtol` / KKT / raio mínimo), não o teto de iterações.
 
-Se `T2/saida/bateria.pkl` já existe, o notebook o recarrega. Apague o arquivo
-para rerrodar os 15 problemas.
+Se `T2/saida/bateria.pkl` existe **e** foi gravado com o mesmo \(K\), o
+notebook o recarrega. Senão a bateria é recalculada.
 """,
     )
     py(nb, BOOT)
     py(
         nb,
         """\
-import pickle
-import numpy as np
-from src.experiencia import executar
-from src.otimizadores import agregar
-from src.paths import saida_dir
+from src.experiencia import carregar_ou_executar
+from src.parametros import P
 
-pkl = saida_dir() / "bateria.pkl"
-if pkl.exists():
-    with open(pkl, "rb") as f:
-        payload = pickle.load(f)
-    print("carregado", pkl)
-else:
-    payload = executar()
-    print("bateria executada e gravada")
-
+payload = carregar_ou_executar()
 registros = payload["registros"]
 resumo = payload["resumo"]
+print("K =", payload.get("K", P.K), "n_z =", payload.get("n_z"))
 print("erro da Jacobiana eq/ineq:", payload["jac_err_eq"], payload["jac_err_ineq"])
 """,
     )
@@ -299,23 +289,26 @@ def nb04():
 
 Animação, estroboscópio (tipo Fig. 6 do paper) e perfis \(q(t)\), \(\dot q(t)\)
 da melhor trajetória viável da bateria. Figuras em `T2/figuras/`.
+
+Se `bateria.pkl` for de outro \(K\) (por exemplo \(K=10\) depois de mudar para
+\(K=50\)), a bateria é recalculada antes de integrar.
 """,
     )
     py(nb, BOOT)
     py(
         nb,
         """\
-import pickle
 from IPython.display import Image, display
-from src.paths import figuras_dir, saida_dir
+from src.experiencia import carregar_ou_executar
+from src.paths import figuras_dir
 from src.simulacao import salvar_tudo
 from src.transcricao import integrar
 
-with open(saida_dir() / "bateria.pkl", "rb") as f:
-    payload = pickle.load(f)
+payload = carregar_ou_executar()
 melhor = payload["melhor"]
 tr = integrar(melhor["z"])
-print(f"método={melhor['metodo']}  chute={melhor['chute']}  tf={tr.tf:.4f} s  viável={melhor['viavel']}")
+print(f"K={payload.get('K')}  método={melhor['metodo']}  chute={melhor['chute']}  "
+      f"tf={tr.tf:.4f} s  viável={melhor['viavel']}  conv={melhor.get('convergiu')}")
 figs = salvar_tudo(tr, figuras_dir(), prefixo="melhor")
 for k, p in figs.items():
     print(k, p)
@@ -354,11 +347,9 @@ se compara ao paper (\(t_f\approx 1{,}180\) s, obstáculo com \(N=3\)).
     py(
         nb,
         """\
-import pickle
-from src.paths import saida_dir
+from src.experiencia import carregar_ou_executar
 
-with open(saida_dir() / "bateria.pkl", "rb") as f:
-    payload = pickle.load(f)
+payload = carregar_ou_executar()
 resumo = payload["resumo"]
 melhor = payload["melhor"]
 
@@ -375,18 +366,15 @@ print("paper, cinemática com obstáculo N=3: tf ≈ 1.180 s")
         r"""## Leitura
 
 - **Pontos interiores** (`trust-constr` + polimento SQP) param em um ponto KKT
-  nas quatro partidas viáveis. A Jacobiana analítica das restrições entra no
-  solver; o polimento fecha o critério de ótimo local que a barreira sozinha
-  não atinge neste problema bang-bang.
-- **Pattern search** (COBYLA) também converge nas quatro partidas viáveis: a
-  parada é o raio mínimo da região de confiança, não o teto de avaliações. Sem
-  derivadas o \(t_f\) local fica maior (\(\approx 2{,}4\)–\(2{,}8\) s).
-- **Newton-SQP** (`SLSQP`) fecha KKT nas mesmas quatro partidas, com
-  \(t_f\approx 1{,}194\) s. A reta no espaço das juntas atravessa o disco e os
-  três métodos falham ali (não há direção viável de descida a partir desse chute).
-- **Paper.** \(t_f\approx 1{,}18\) s com colocação LGR e malha bem mais fina.
-  O melhor desta transcrição, \(t_f\approx 1{,}192\) s, está na mesma ordem.
-  A passagem é pela esquerda do disco no C-space, como no caso \(N=3\).
+  nas quatro partidas viáveis, com \(t_f\approx 1{,}181\) s.
+- **Pattern search** (COBYLA) em \(\mathbb{R}^{101}\) não fecha o raio mínimo no
+  orçamento da bateria: fica viável perto do chute (\(\approx 5{,}4\) s) e para
+  em `MAXFUN`.
+- **Newton-SQP** (`SLSQP`) fecha KKT nas mesmas quatro partidas, no mesmo poço.
+  A reta no espaço das juntas atravessa o disco e os três métodos falham ali.
+- **Paper.** \(t_f\approx 1{,}180\) s com colocação LGR. Com \(K=50\) o melhor
+  desta transcrição é \(t_f\approx 1{,}181\) s. A passagem é pela esquerda do
+  disco no C-space, como no caso \(N=3\).
 """,
     )
     nb.metadata["kernelspec"] = {"display_name": "Python 3", "language": "python", "name": "python3"}

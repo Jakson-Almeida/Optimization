@@ -59,7 +59,7 @@ Lagrange e a colocação LGR ficam de fora; a transcrição é aceleração cons
 por intervalo.
 
 **No Colab:** Runtime → Run all. A célula de instalação é inofensiva se os
-pacotes já existirem. A bateria de otimização leva da ordem de um minuto.
+pacotes já existirem. A bateria de otimização com \(K=50\) leva alguns minutos.
 """,
     )
     py(
@@ -111,8 +111,8 @@ OCP contínuo: estado \(\mathbf{x}=\{q_1,q_2,v_{q_1},v_{q_2}\}^\mathsf{T}\),
 controle \(\mathbf{u}=\{a_{q_1},a_{q_2}\}^\mathsf{T}\),
 \(\dot q_i=v_{q_i}\), \(\dot v_{q_i}=a_{q_i}\), \(J=t_f\).
 
-PNL: \(\mathbf{z}=(t_f,a_{1,0},\ldots,a_{1,K-1},a_{2,0},\ldots,a_{2,K-1})\in\mathbb{R}^{21}\),
-\(K=10\), \(h=t_f/K\),
+PNL: \(\mathbf{z}=(t_f,a_{1,0},\ldots,a_{1,K-1},a_{2,0},\ldots,a_{2,K-1})\in\mathbb{R}^{101}\),
+\(K=50\), \(h=t_f/K\),
 
 \[
 v_{i,k+1}=v_{i,k}+h a_{i,k},\qquad
@@ -215,11 +215,12 @@ registros, _ = rodar_bateria(semente=0)
 resumo = agregar(registros)
 melhor = melhor_viavel(registros)
 
-print(f"{'método':20s} {'chute':18s} {'tf':>8s} {'conv':>5s} {'viável':>7s} {'eq':>10s} {'ineq':>10s} {'iter':>6s} {'CPU':>8s}")
+print(f"{'método':20s} {'chute':18s} {'tf':>8s} {'conv':>5s} {'viável':>7s} {'eq':>10s} {'ineq':>10s} {'iter':>6s} {'CPU':>8s}  parada")
 for r in registros:
     print(
         f"{r['metodo']:20s} {r['chute']:18s} {r['tf']:8.4f} {str(r['convergiu']):>5s} {str(r['viavel']):>7s} "
-        f"{r['violacao_eq']:10.2e} {r['violacao_ineq']:10.2e} {r['niter']:6d} {r['cpu_s']:8.3f}"
+        f"{r['violacao_eq']:10.2e} {r['violacao_ineq']:10.2e} {r['niter']:6d} {r['cpu_s']:8.3f}  "
+        f"{str(r.get('mensagem', ''))[:55]}"
     )
 print()
 print(f"{'método':20s} {'ok':>6s} {'tf min':>8s} {'tf méd':>8s} {'tf máx':>8s} {'std':>8s} {'CPU méd':>8s}")
@@ -270,20 +271,27 @@ for m, s in resumo.items():
         f"{m:20s} {s['n_sucesso']}/{s['n']:<3d} {s['tf_min']:8.4f} {s['tf_media']:8.4f} "
         f"{s['tf_max']:8.4f} {s['cpu_media']:8.3f}"
     )
-print(f"\\nmelhor: {melhor['metodo']} / {melhor['chute']}  tf={melhor['tf']:.4f} s")
+print(f"\\nmelhor: {melhor['metodo']} / {melhor['chute']}  tf={melhor['tf']:.4f} s  conv={melhor.get('convergiu')}")
 print("paper, cinemática com obstáculo N=3: tf ≈ 1.180 s")
+print("\\nparada de cada corrida:")
+for r in registros:
+    print(f"  {r['metodo']:18s} {r['chute']:16s} {r.get('mensagem', '')}")
 """,
     )
     md(
         nb,
-        r"""**Leitura.** Nas quatro partidas viáveis os três métodos param em um ótimo
-local (KKT ou raio mínimo do COBYLA), não no teto de iterações. A reta no
-espaço das juntas atravessa o disco e os três falham ali. Pontos interiores
-e Newton-SQP dão \(t_f\approx 1{,}19\) s; COBYLA, sem derivadas, para numa
-vizinhança mais lenta (\(\approx 2{,}4\)–\(2{,}8\) s). O \(t_f\) do paper
-(1,18 s) usa colocação LGR bem mais fina; o valor deste notebook deve ser
-lido na mesma ordem de grandeza. O caminho contorna o disco pela esquerda,
-como no caso \(N=3\).
+        r"""**Leitura.** Com \(K=50\) (\(\mathbf{z}\in\mathbb{R}^{101}\)):
+
+- **Newton-SQP** e **pontos interiores** (após polimento SQP) obedecem à
+  tolerância (`ftol` / KKT) nas quatro partidas viáveis, \(t_f\approx 1{,}181\) s
+  (paper: \(1{,}180\) s).
+- **COBYLA** nessas mesmas partidas fica viável mas para em `MAXFUN` (teto de
+  avaliações), não no raio mínimo da região de confiança.
+- A **reta nas juntas** atravessa o disco: os três métodos falham ali (o ponto
+  interior esgota avaliações ainda inviável; o Newton para com derivada
+  direcional positiva).
+
+O caminho ótimo local contorna o disco pela esquerda, como no caso \(N=3\).
 """,
     )
     return nb
